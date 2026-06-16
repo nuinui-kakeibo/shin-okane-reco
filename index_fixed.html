@@ -1,0 +1,357 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>家計簿</title>
+<style>
+body{margin:0;background:#fff;color:#000;font-family:sans-serif;font-size:24px}
+header{padding:20px;text-align:center;font-size:32px;font-weight:bold;border-bottom:2px solid #ddd}
+nav{display:flex;gap:10px;padding:10px}
+button{font-size:24px;min-height:60px;padding:12px 20px;border:1px solid #333;border-radius:10px;background:#fff}
+input{font-size:24px;min-height:60px;width:100%;box-sizing:border-box}
+.screen{display:none;padding:12px}
+.active{display:block}
+.weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-weight:bold}
+.sun{color:red}.sat{color:blue}
+#calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px}
+.day{border:1px solid #ccc;min-height:140px;padding:6px;border-radius:8px;cursor:pointer}
+.today{background:#fff3b0;border:3px solid orange}
+.card{border:1px solid #ccc;padding:12px;margin-top:12px;border-radius:8px}
+label{display:block;margin-top:12px}
+table{width:100%;border-collapse:collapse}
+td,th{border:1px solid #ccc;padding:10px}
+</style>
+</head>
+<body>
+
+<header>家計簿</header>
+
+<nav>
+<button onclick="showScreen('calendarScreen')">カレンダー</button>
+<button onclick="newEntry()">入力</button>
+<button onclick="showMonthly()">集計</button>
+</nav>
+
+<div id="calendarScreen" class="screen active">
+<h2 id="monthTitle"></h2>
+<button onclick="changeMonth(-1)">←前月</button>
+<button onclick="changeMonth(1)">翌月→</button>
+<h3 id="monthTotal"></h3>
+
+<div class="weekdays">
+<div class="sun">日</div><div>月</div><div>火</div><div>水</div>
+<div>木</div><div>金</div><div class="sat">土</div>
+</div>
+
+<div id="calendar"></div>
+</div>
+
+<div id="inputScreen" class="screen">
+<h2>入力</h2>
+
+<label>日付
+<input type="date" id="date">
+</label>
+
+<label>食費
+<input type="number" id="food" placeholder="入力してください">
+</label>
+
+<label>日用品
+<input type="number" id="daily" placeholder="入力してください">
+</label>
+
+<label>交通費
+<input type="number" id="transport" placeholder="入力してください">
+</label>
+
+<label>医療費
+<input type="number" id="medical" placeholder="入力してください">
+</label>
+
+<div class="card">
+<h3>カード払い</h3>
+<div id="cardList"></div>
+<button onclick="addCard()">カード追加</button>
+</div>
+
+<button onclick="saveEntry()">保存</button>
+</div>
+
+<div id="detailScreen" class="screen">
+<h2>日別詳細</h2>
+<div id="detail"></div>
+</div>
+
+<div id="summaryScreen" class="screen">
+<h2>月別集計</h2>
+<div id="summary"></div>
+</div>
+
+<script>
+let current=new Date();
+
+function getData(){
+ return JSON.parse(localStorage.getItem("kakeibo")||"{}");
+}
+
+function saveData(d){
+ localStorage.setItem("kakeibo",JSON.stringify(d));
+}
+
+function showScreen(id){
+ document.querySelectorAll(".screen").forEach(x=>x.classList.remove("active"));
+ document.getElementById(id).classList.add("active");
+}
+
+function clearForm(){
+ document.getElementById("food").value="";
+ document.getElementById("daily").value="";
+ document.getElementById("transport").value="";
+ document.getElementById("medical").value="";
+ document.getElementById("cardList").innerHTML="";
+ addCard();
+}
+
+function newEntry(dateValue=null){
+ clearForm();
+
+ const d=dateValue || new Date().toISOString().split("T")[0];
+ document.getElementById("date").value=d;
+
+ showScreen("inputScreen");
+}
+
+function addCard(val=""){
+ const n=document.querySelectorAll(".cardAmount").length+1;
+ const mark="①②③④⑤⑥⑦⑧⑨⑩"[n-1] || n;
+
+ const div=document.createElement("div");
+
+ div.innerHTML=`
+ <label>カード${mark}
+ <input type="number" class="cardAmount" value="${val}">
+ </label>
+ <button onclick="this.parentNode.remove()">削除</button>
+ `;
+
+ cardList.appendChild(div);
+}
+
+function total(r){
+ if(!r)return 0;
+ return (r.food||0)+(r.daily||0)+(r.transport||0)+(r.medical||0)+
+ (r.cards||[]).reduce((a,b)=>a+b,0);
+}
+
+function saveEntry(){
+
+ const data=getData();
+
+ const date=document.getElementById("date").value;
+
+ data[date]={
+  food:Number(food.value)||0,
+  daily:Number(daily.value)||0,
+  transport:Number(transport.value)||0,
+  medical:Number(medical.value)||0,
+  cards:[...document.querySelectorAll(".cardAmount")]
+   .map(x=>Number(x.value)||0)
+   .filter(x=>x!==0)
+ };
+
+ saveData(data);
+
+ renderCalendar();
+
+ showScreen("calendarScreen");
+
+ alert("保存しました");
+}
+
+function renderCalendar(){
+
+ const y=current.getFullYear();
+ const m=current.getMonth();
+
+ monthTitle.textContent=y+"年"+(m+1)+"月";
+
+ const first=new Date(y,m,1);
+ const last=new Date(y,m+1,0);
+
+ calendar.innerHTML="";
+
+ let monthTotalValue=0;
+
+ const data=getData();
+
+ for(let i=0;i<first.getDay();i++){
+   const blank=document.createElement("div");
+   calendar.appendChild(blank);
+ }
+
+ const todayStr=new Date().toISOString().split("T")[0];
+
+ for(let d=1;d<=last.getDate();d++){
+
+   const ds=y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+
+   const rec=data[ds];
+
+   const div=document.createElement("div");
+   div.className="day";
+
+   if(ds===todayStr){
+      div.classList.add("today");
+   }
+
+   const w=new Date(y,m,d).getDay();
+
+   let color="";
+   if(w===0) color="red";
+   if(w===6) color="blue";
+
+   if(rec){
+      const t=total(rec);
+      monthTotalValue+=t;
+
+      div.innerHTML=`
+      <div style="color:${color};font-weight:bold">${d}</div>
+      <div>${t.toLocaleString()}円</div>`;
+
+      div.onclick=()=>showDetail(ds);
+
+   }else{
+
+      div.innerHTML=`
+      <div style="color:${color};font-weight:bold">${d}</div>`;
+
+      div.onclick=()=>newEntry(ds);
+   }
+
+   calendar.appendChild(div);
+ }
+
+ monthTotal.textContent="月間合計："+monthTotalValue.toLocaleString()+"円";
+}
+
+function showDetail(date){
+
+ const r=getData()[date];
+
+ showScreen("detailScreen");
+
+ let cards="";
+
+ (r.cards||[]).forEach((c,i)=>{
+   const mark="①②③④⑤⑥⑦⑧⑨⑩"[i] || (i+1);
+   cards+="カード"+mark+"："+c+"円<br>";
+ });
+
+ detail.innerHTML=`
+ <div class="card">
+ <strong>${date}</strong><br><br>
+ 食費：${r.food}円<br>
+ 日用品：${r.daily}円<br>
+ 交通費：${r.transport}円<br>
+ 医療費：${r.medical}円<br>
+ ${cards}<br>
+ <strong>合計：${total(r)}円</strong><br><br>
+ <button onclick="editDay('${date}')">編集</button>
+ <button onclick="deleteDay('${date}')">削除</button>
+ </div>`;
+}
+
+function editDay(date){
+
+ const r=getData()[date];
+
+ clearForm();
+
+ document.getElementById("date").value=date;
+
+ food.value=r.food||"";
+ daily.value=r.daily||"";
+ transport.value=r.transport||"";
+ medical.value=r.medical||"";
+
+ cardList.innerHTML="";
+
+ if(r.cards.length===0){
+   addCard();
+ }else{
+   r.cards.forEach(c=>addCard(c));
+ }
+
+ showScreen("inputScreen");
+}
+
+function deleteDay(date){
+
+ if(!confirm("削除しますか？")) return;
+
+ const d=getData();
+
+ delete d[date];
+
+ saveData(d);
+
+ renderCalendar();
+
+ showScreen("calendarScreen");
+}
+
+function showMonthly(){
+
+ showScreen("summaryScreen");
+
+ const data=getData();
+
+ const y=current.getFullYear();
+ const m=String(current.getMonth()+1).padStart(2,"0");
+
+ let foodT=0,dailyT=0,transportT=0,medicalT=0,cardT=0;
+
+ Object.keys(data).forEach(k=>{
+
+   if(k.startsWith(y+"-"+m)){
+
+      const r=data[k];
+
+      foodT+=r.food||0;
+      dailyT+=r.daily||0;
+      transportT+=r.transport||0;
+      medicalT+=r.medical||0;
+      cardT+=(r.cards||[]).reduce((a,b)=>a+b,0);
+   }
+ });
+
+ const grand=foodT+dailyT+transportT+medicalT+cardT;
+
+ summary.innerHTML=`
+ <table>
+ <tr><th>項目</th><th>金額</th></tr>
+ <tr><td>食費</td><td>${foodT.toLocaleString()}円</td></tr>
+ <tr><td>日用品</td><td>${dailyT.toLocaleString()}円</td></tr>
+ <tr><td>交通費</td><td>${transportT.toLocaleString()}円</td></tr>
+ <tr><td>医療費</td><td>${medicalT.toLocaleString()}円</td></tr>
+ <tr><td>カード払い</td><td>${cardT.toLocaleString()}円</td></tr>
+ <tr><th>合計</th><th>${grand.toLocaleString()}円</th></tr>
+ </table>`;
+}
+
+function changeMonth(n){
+ current.setMonth(current.getMonth()+n);
+ renderCalendar();
+}
+
+newEntry();
+showScreen("calendarScreen");
+renderCalendar();
+</script>
+
+</body>
+</html>
